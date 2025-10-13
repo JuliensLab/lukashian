@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lukashian Calendar</title>
+</head>
+
+<body>
+    <h1>Lukashian Calendar</h1>
+    <div id="datetime"></div>
+
+    <script src="lukashian.js"></script>
+    <script>
+        function updateTime() {
+            const now = Date.now();
+            const utcDate = new Date(now).toUTCString();
+            const lukashian = getLukashianDatetime(now);
+
+            document.getElementById('datetime').innerHTML = `
+                <p><strong>UTC:</strong> ${utcDate}</p>
+                <p><strong>Lukashian:</strong> ${lukashian.formattedString}</p>
+                <p>Year: ${lukashian.year}, Day: ${lukashian.day}, Beep: ${lukashian.beep}</p>
+                <p>Iteration Count: ${lukashian.iterationCount}</p>
+            `;
+        }
+
+        updateTime();
+        setInterval(updateTime, 1000);
+    </script>
+</body>
+
+</html>
