@@ -222,5 +222,8 @@ function getLukashianDatetime(unixEpoch) {
 	const proportionOfDay = getProportionOfDay(epochMs, epochDay);
 	const beeps = getBeeps(proportionOfDay);
 	const formattedString = format(year, day, beeps);
+
+	// console.log("yearEpochMilliseconds", yearEpochMilliseconds, "dayEpochMilliseconds", dayEpochMilliseconds, "lastIterationCount", lastIterationCount);
+
 	return { year, day, beep: beeps, formattedString, iterationCount: lastIterationCount };
 }
