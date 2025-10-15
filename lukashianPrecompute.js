@@ -104,9 +104,7 @@ function computeCumNanos(minDay) {
   return epochNanos;
 }
 
-function precompute(startGregYear, endGregYear) {
-  const unixStart = Date.parse(`${startGregYear}-01-01T00:00:00Z`);
-  const unixEnd = Date.parse(`${endGregYear}-12-31T23:59:59Z`);
+function precompute(unixStart, unixEnd) {
   const epochStart = getLukashianEpochMilliseconds(unixStart);
   const epochEnd = getLukashianEpochMilliseconds(unixEnd);
 
@@ -125,22 +123,28 @@ function precompute(startGregYear, endGregYear) {
   index = binarySearch(tempYearEpochMs, epochEnd);
   let endYear = index >= 0 ? index + 1 : -index;
 
-  const bufferYear = 2;
+  const bufferYear = 1;
   const MIN_YEAR = startYear - bufferYear;
   const MAX_YEAR = endYear + bufferYear;
 
   const yearEpochMs = tempYearEpochMs.slice(MIN_YEAR - 1, MAX_YEAR);
 
-  const bufferDay = 400;
-  const minApproxDay = approxEpochDay(epochStart) - bufferDay;
-  const maxApproxDay = approxEpochDay(epochEnd) + bufferDay;
+  const bufferDay = 1;
+  const minApproxDayFromStart = approxEpochDay(epochStart) - bufferDay;
+  const epochMsAtStartOfMinYear = getJdeMillisAtEndOfYear(MIN_YEAR - 1) - jdeMillisAtStartOfCalendar + 1n;
+  const minApproxDayFromYear = approxEpochDay(epochMsAtStartOfMinYear) - bufferDay;
+  const minApproxDay = Math.min(minApproxDayFromStart, minApproxDayFromYear);
+  const maxApproxDayFromEnd = approxEpochDay(epochEnd) + bufferDay;
+  const epochMsAtStartOfMaxYear = getJdeMillisAtEndOfYear(MAX_YEAR) - jdeMillisAtStartOfCalendar + 1n;
+  const maxApproxDayFromYear = approxEpochDay(epochMsAtStartOfMaxYear) + bufferDay;
+  const maxApproxDay = Math.max(maxApproxDayFromEnd, maxApproxDayFromYear);
   const MIN_DAY = minApproxDay;
   const MAX_DAY = maxApproxDay;
 
   const PRELOADED_CUM_NANOS = computeCumNanos(MIN_DAY);
 
   const baryCenterPerihelionEpochMilliseconds = [];
-  for (let year = MIN_YEAR - 2; year <= MAX_YEAR + 2; year++) {
+  for (let year = MIN_YEAR - 1; year <= MAX_YEAR + 1; year++) {
     baryCenterPerihelionEpochMilliseconds.push(getJdeMillisForBaryCenterPerihelion(year) - jdeMillisAtStartOfCalendar);
   }
 
@@ -188,8 +192,8 @@ function precompute(startGregYear, endGregYear) {
   }
 
   const data = {
-    gregStart: startGregYear,
-    gregEnd: endGregYear,
+    gregStartDate: new Date(unixStart).toISOString(),
+    gregEndDate: new Date(unixEnd).toISOString(),
     minYear: MIN_YEAR,
     maxYear: MAX_YEAR,
     minDay: MIN_DAY,

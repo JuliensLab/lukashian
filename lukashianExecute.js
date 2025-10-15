@@ -6,12 +6,13 @@ let loadedData = null;
 async function loadData() {
   try {
     const response = await fetch("lukashian_data.json");
+    if (!response.ok) throw new Error("File not found");
     const json = await response.json();
     loadedData = json;
     loadedData.yearEpochMilliseconds = loadedData.yearEpochMs.map(BigInt);
     loadedData.dayEpochMilliseconds = loadedData.dayEpochMs.map(BigInt);
   } catch (e) {
-    console.error("Failed to load precomputed data:", e);
+    console.warn("Failed to load precomputed data:", e.message);
     loadedData = null;
   }
 }
@@ -53,18 +54,23 @@ function getEpochDayForEpochMilliseconds(epochMilliseconds) {
   let index = binarySearch(dayEpochMs, BigInt(epochMilliseconds));
   let relDay = index >= 0 ? index + 1 : -index;
   let epochDay = loadedData.minDay + relDay - 1;
-  if (BigInt(epochMilliseconds) < dayEpochMs[0] || BigInt(epochMilliseconds) > dayEpochMs[dayEpochMs.length - 1]) {
-    throw new Error("Date outside supported range");
+  const msBig = BigInt(epochMilliseconds);
+
+  if (msBig < dayEpochMs[0] || msBig > dayEpochMs[dayEpochMs.length - 1]) {
+    console.log("Debug: Date outside supported range - msBig is out of bounds");
+    // Graceful fallback: return null instead of throw
+    return null;
   }
   return epochDay;
 }
 
 function getDayNumber(epochDay, year) {
-  if (!loadedData) return null;
+  if (!loadedData || epochDay === null) return null;
   const yearEpochMs = loadedData.yearEpochMilliseconds;
-  const jdeMillisAtStartOfCalendar = getJdeMillisAtEndOfYear(0); // Still need this, but it's lightweight
+  const jdeMillisAtStartOfCalendar = getJdeMillisAtEndOfYear(0);
   const epochMillisecondsAtStartOfYear = getJdeMillisAtEndOfYear(year - 1) - jdeMillisAtStartOfCalendar + 1n;
   const runningEpochDayAtStartOfYear = getEpochDayForEpochMilliseconds(epochMillisecondsAtStartOfYear);
+  if (runningEpochDayAtStartOfYear === null) return null;
   const epochMillisecondsAtStartOfRunningDay =
     runningEpochDayAtStartOfYear === loadedData.minDay
       ? 1n
@@ -75,14 +81,11 @@ function getDayNumber(epochDay, year) {
 }
 
 function getProportionOfDay(epochMilliseconds, epochDay) {
-  if (!loadedData) return null;
+  if (!loadedData || epochDay === null) return null;
   const dayEpochMs = loadedData.dayEpochMilliseconds;
-  const millisecondsOfDay =
-    epochDay === loadedData.minDay
-      ? dayEpochMs[0]
-      : dayEpochMs[epochDay - loadedData.minDay] - dayEpochMs[epochDay - loadedData.minDay - 1];
-  const millisecondsPassed =
-    BigInt(epochMilliseconds) - (epochDay === loadedData.minDay ? 1n : dayEpochMs[epochDay - loadedData.minDay - 1] + 1n);
+  const relIndex = epochDay - loadedData.minDay;
+  const millisecondsOfDay = relIndex === 0 ? dayEpochMs[0] : dayEpochMs[relIndex] - dayEpochMs[relIndex - 1];
+  const millisecondsPassed = BigInt(epochMilliseconds) - (relIndex === 0 ? 1n : dayEpochMs[relIndex - 1] + 1n);
   return Number(millisecondsPassed) / Number(millisecondsOfDay);
 }
 
@@ -96,18 +99,18 @@ function format(year, day, beeps) {
 
 function getLukashianDatetime(unixEpoch) {
   if (!loadedData) {
-    return {
-      year: 0,
-      day: 0,
-      beep: 0,
-      formattedString: "No precomputed data available. Please precompute and save the JSON file.",
-      iterationCount: 0,
-    };
+    return { year: 0, day: 0, beep: 0, formattedString: "No precomputed data available.", iterationCount: 0 };
   }
   const epochMs = getLukashianEpochMilliseconds(unixEpoch);
   const year = getYearForEpochMilliseconds(epochMs);
   const epochDay = getEpochDayForEpochMilliseconds(epochMs);
+  if (epochDay === null) {
+    return { year: 0, day: 0, beep: 0, formattedString: "Date outside supported range.", iterationCount: loadedData.iterationCount };
+  }
   const day = getDayNumber(epochDay, year);
+  if (day === null) {
+    return { year: 0, day: 0, beep: 0, formattedString: "Date outside supported range.", iterationCount: loadedData.iterationCount };
+  }
   const proportionOfDay = getProportionOfDay(epochMs, epochDay);
   const beeps = getBeeps(proportionOfDay);
   const formattedString = format(year, day, beeps);
@@ -115,7 +118,7 @@ function getLukashianDatetime(unixEpoch) {
   return { year, day, beep: beeps, formattedString, iterationCount: loadedData.iterationCount };
 }
 
-// Note: getJdeMillisAtEndOfYear is still needed for getDayNumber, but since it's called rarely and lightweight, it's kept here.
+// Lightweight functions still needed
 function getJdeMillisAtEndOfYear(year) {
   let jde0;
   if (year < 4900) {

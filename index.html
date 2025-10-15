@@ -11,10 +11,10 @@
     <h1>The Lukashian Calendar</h1>
     <h2>Lite JS implementation</h2>
     <div>
-        <label>Start Gregorian Year:</label>
-        <input type="number" id="startYear" value="2025">
-        <label>End Gregorian Year:</label>
-        <input type="number" id="endYear" value="2035">
+        <label>Start Date:</label>
+        <input type="date" id="startDate">
+        <label>Number of Days:</label>
+        <input type="number" id="numDays" value="30">
         <button id="precomputeBtn">Precompute</button>
     </div>
     <div id="datetime"></div>
@@ -23,28 +23,61 @@
     <script src="lukashianPrecompute.js"></script>
     <script src="lukashianExecute.js"></script>
     <script>
+        // Set default start date to 2 days ago
+        const twoDaysAgo = new Date(Date.now() - 2 * 86400000);
+        document.getElementById('startDate').value = twoDaysAgo.toISOString().split('T')[0];
+
+        let officialData = null;
+        let prevLocal = '';
+        let isFetching = false;
+
+        async function loadOfficialData() {
+            try {
+                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent('https://www.lukashian.org/clockinfo');
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("Failed to fetch official data");
+                officialData = await response.json();
+            } catch (e) {
+                console.warn("Failed to load official data:", e.message);
+            }
+        }
+
         loadData().then(() => {
+            return loadOfficialData();
+        }).then(() => {
             updateTime();
-            setInterval(updateTime, 1000);
+            setInterval(updateTime, 100);
         });
 
-        function updateTime() {
+        async function updateTime() {
             const now = Date.now();
             const utcDate = new Date(now).toUTCString();
             const lukashian = getLukashianDatetime(now);
+            const currentLocal = lukashian.formattedString;
+
+            if (currentLocal !== prevLocal && !isFetching) {
+                isFetching = true;
+                loadOfficialData().then(() => {
+                    isFetching = false;
+                });
+            }
+
+            prevLocal = currentLocal;
 
             document.getElementById('datetime').innerHTML = `
                 <p><strong>UTC:</strong> ${utcDate}</p>
-                <p><strong>Lukashian:</strong> ${lukashian.formattedString}</p>
-                <p>Year: ${lukashian.year}, Day: ${lukashian.day}, Beep: ${lukashian.beep}</p>
-                <p>Iteration Count: ${lukashian.iterationCount}</p>
+                <p><strong>Official Lukashian:</strong> ${officialData ? `${officialData.currentBeeps} ${officialData.currentDay}-${officialData.currentYear}` : 'Loading...'}</p>
+                <p><strong>Local Lukashian:</strong> ${lukashian.formattedString}</p>
+                <p><strong>Iteration Count:</strong> ${lukashian.iterationCount}</p>
             `;
         }
 
         document.getElementById('precomputeBtn').addEventListener('click', () => {
-            const start = parseInt(document.getElementById('startYear').value);
-            const end = parseInt(document.getElementById('endYear').value);
-            const data = precompute(start, end);
+            const startDate = document.getElementById('startDate').value;
+            const numDays = parseInt(document.getElementById('numDays').value);
+            const unixStart = Date.parse(`${startDate}T00:00:00Z`);
+            const unixEnd = unixStart + numDays * 86400000 - 1; // Cover full days
+            const data = precompute(unixStart, unixEnd);
             const json = JSON.stringify(data, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
