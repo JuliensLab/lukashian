@@ -10,10 +10,24 @@
 <body>
     <h1>The Lukashian Calendar</h1>
     <h2>Lite JS implementation</h2>
+    <div>
+        <label>Start Gregorian Year:</label>
+        <input type="number" id="startYear" value="2025">
+        <label>End Gregorian Year:</label>
+        <input type="number" id="endYear" value="2035">
+        <button id="precomputeBtn">Precompute</button>
+    </div>
     <div id="datetime"></div>
 
-    <script src="lukashianLite.js"></script>
+    <script src="lukashianShared.js"></script>
+    <script src="lukashianPrecompute.js"></script>
+    <script src="lukashianExecute.js"></script>
     <script>
+        loadData().then(() => {
+            updateTime();
+            setInterval(updateTime, 1000);
+        });
+
         function updateTime() {
             const now = Date.now();
             const utcDate = new Date(now).toUTCString();
@@ -27,8 +41,19 @@
             `;
         }
 
-        updateTime();
-        setInterval(updateTime, 1000);
+        document.getElementById('precomputeBtn').addEventListener('click', () => {
+            const start = parseInt(document.getElementById('startYear').value);
+            const end = parseInt(document.getElementById('endYear').value);
+            const data = precompute(start, end);
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'lukashian_data.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
     </script>
 </body>
 
