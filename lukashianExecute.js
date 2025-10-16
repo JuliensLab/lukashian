@@ -5,12 +5,15 @@ let loadedData = null;
 
 async function loadData() {
   try {
-    const response = await fetch("lukashian_data.json");
+    const response = await fetch("lukashian_data.json?t=" + Date.now());
     if (!response.ok) throw new Error("File not found");
     const json = await response.json();
     loadedData = json;
     loadedData.yearEpochMilliseconds = loadedData.yearEpochMs.map(BigInt);
     loadedData.dayEpochMilliseconds = loadedData.dayEpochMs.map(BigInt);
+    console.log("Debug: loadedData loaded, dayEpochMs length =", loadedData.dayEpochMs.length);
+    console.log("Debug: dayEpochMs[0] =", loadedData.dayEpochMs[0]);
+    console.log("Debug: dayEpochMs[last] =", loadedData.dayEpochMs[loadedData.dayEpochMs.length - 1]);
   } catch (e) {
     console.warn("Failed to load precomputed data:", e.message);
     loadedData = null;
@@ -37,7 +40,9 @@ function getLukashianEpochMilliseconds(unixEpochMilliseconds) {
   const unix = BigInt(unixEpochMilliseconds);
   let index = binarySearch(UNIX_TIMESTAMPS_WITH_LEAP_SECOND, unix);
   const numberOfLeapSeconds = index >= 0 ? index + 1 : -index - 1;
-  return unix + BigInt(numberOfLeapSeconds * 1000) + UNIX_EPOCH_OFFSET_MILLISECONDS;
+  const result = unix + BigInt(numberOfLeapSeconds * 1000) + UNIX_EPOCH_OFFSET_MILLISECONDS;
+
+  return result;
 }
 
 function getYearForEpochMilliseconds(epochMilliseconds) {
@@ -56,8 +61,8 @@ function getEpochDayForEpochMilliseconds(epochMilliseconds) {
   let epochDay = loadedData.minDay + relDay - 1;
   const msBig = BigInt(epochMilliseconds);
 
-  if (msBig < dayEpochMs[0] || msBig > dayEpochMs[dayEpochMs.length - 1]) {
-    console.log("Debug: Date outside supported range - msBig is out of bounds");
+  if (msBig < dayEpochMs[0]) {
+    console.log("Debug: Date outside supported range - msBig is before the range");
     // Graceful fallback: return null instead of throw
     return null;
   }

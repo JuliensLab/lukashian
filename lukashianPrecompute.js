@@ -1,16 +1,6 @@
 // lukashianPrecompute.js
 // This file computes the data and returns it as an object for JSON serialization
 
-const A = [485, 203, 199, 182, 156, 136, 77, 74, 70, 58, 52, 50, 45, 44, 29, 18, 17, 16, 14, 12, 12, 12, 9, 8];
-const B = [
-  324.96, 337.23, 342.08, 27.85, 73.14, 171.52, 222.54, 296.72, 243.58, 119.81, 297.17, 21.02, 247.54, 325.15, 60.93, 155.12, 288.79,
-  198.04, 199.76, 95.39, 287.11, 320.81, 227.73, 15.45,
-];
-const C = [
-  1934.136, 32964.467, 20.186, 445267.112, 45036.886, 22518.443, 65928.934, 3034.906, 9037.513, 33718.147, 150.678, 2281.226, 29929.562,
-  31555.956, 4443.417, 67555.328, 4562.452, 62894.029, 31436.921, 14577.848, 31931.756, 34777.259, 1222.114, 16859.074,
-];
-
 function getJdeMillisAtEndOfYear(year) {
   let jde0;
   if (year < 4900) {
@@ -135,13 +125,13 @@ function precompute(unixStart, unixEnd) {
   const minApproxDayFromYear = approxEpochDay(epochMsAtStartOfMinYear) - bufferDay;
   const minApproxDay = Math.min(minApproxDayFromStart, minApproxDayFromYear);
   const maxApproxDayFromEnd = approxEpochDay(epochEnd) + bufferDay;
-  const epochMsAtStartOfMaxYear = getJdeMillisAtEndOfYear(MAX_YEAR) - jdeMillisAtStartOfCalendar + 1n;
-  const maxApproxDayFromYear = approxEpochDay(epochMsAtStartOfMaxYear) + bufferDay;
-  const maxApproxDay = Math.max(maxApproxDayFromEnd, maxApproxDayFromYear);
+  const maxApproxDay = maxApproxDayFromEnd;
   const MIN_DAY = minApproxDay;
   const MAX_DAY = maxApproxDay;
 
   const PRELOADED_CUM_NANOS = computeCumNanos(MIN_DAY);
+
+  const epochMsAtStartOfRequiredYear = getJdeMillisAtEndOfYear(startYear - 1) - jdeMillisAtStartOfCalendar + 1n;
 
   const baryCenterPerihelionEpochMilliseconds = [];
   for (let year = MIN_YEAR - 1; year <= MAX_YEAR + 1; year++) {
@@ -158,6 +148,8 @@ function precompute(unixStart, unixEnd) {
   let currentDay = MIN_DAY;
   let epochNanosOfCurrentMeanSolarDay = PRELOADED_CUM_NANOS;
   let iterationCount = 0;
+  let skippedDays = 0;
+  let zeroPushed = false;
   while (currentDay <= MAX_DAY) {
     iterationCount++;
     const lengthOfCurrentMeanSolarDayInNanos = Number(lengthOfMeanSolarDayAtEpochInNanos) + dailyIncreaseInNanos * (currentDay - 1);
@@ -187,7 +179,21 @@ function precompute(unixStart, unixEnd) {
 
     const epochMillisOfCurrentTrueSolarDay = epochMillisOfCurrentMeanSolarDay - BigInt(eotMillis);
 
-    dayEpochMs.push(epochMillisOfCurrentTrueSolarDay);
+    let dayValue;
+    if (epochMillisOfCurrentTrueSolarDay < epochMsAtStartOfRequiredYear) {
+      dayValue = 0n;
+    } else {
+      dayValue = epochMillisOfCurrentTrueSolarDay;
+    }
+
+    if (dayValue !== 0n) {
+      dayEpochMs.push(dayValue);
+    } else if (!zeroPushed) {
+      dayEpochMs.push(dayValue);
+      zeroPushed = true;
+    } else {
+      skippedDays++;
+    }
     currentDay++;
   }
 
@@ -196,12 +202,16 @@ function precompute(unixStart, unixEnd) {
     gregEndDate: new Date(unixEnd).toISOString(),
     minYear: MIN_YEAR,
     maxYear: MAX_YEAR,
-    minDay: MIN_DAY,
+    minDay: MIN_DAY - 1,
     maxDay: MAX_DAY,
     yearEpochMs: yearEpochMs.map((b) => b.toString()),
     dayEpochMs: dayEpochMs.map((b) => b.toString()),
-    iterationCount: iterationCount,
+    iterationCount: dayEpochMs.length,
   };
 
   return data;
+}
+
+if (typeof window !== "undefined") {
+  window.precompute = precompute;
 }
