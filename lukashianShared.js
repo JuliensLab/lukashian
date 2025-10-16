@@ -43,3 +43,59 @@ const SECONDS_SINCE_1900_WITH_LEAP_SECOND = [
 ];
 
 const UNIX_TIMESTAMPS_WITH_LEAP_SECOND = SECONDS_SINCE_1900_WITH_LEAP_SECOND.map((s) => (s - 2208988800n) * 1000n);
+
+function toRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+function toDegrees(radians) {
+  return (radians * 180) / Math.PI;
+}
+
+function binarySearch(arr, target) {
+  let low = 0;
+  let high = arr.length - 1;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (arr[mid] < target) {
+      low = mid + 1;
+    } else if (arr[mid] > target) {
+      high = mid - 1;
+    } else {
+      return mid;
+    }
+  }
+  return -(low + 1);
+}
+
+function getLukashianEpochMilliseconds(unixEpochMilliseconds) {
+  const unix = BigInt(unixEpochMilliseconds);
+  let index = binarySearch(UNIX_TIMESTAMPS_WITH_LEAP_SECOND, unix);
+  const numberOfLeapSeconds = index >= 0 ? index + 1 : -index - 1;
+  const result = unix + BigInt(numberOfLeapSeconds * 1000) + UNIX_EPOCH_OFFSET_MILLISECONDS;
+
+  return result;
+}
+
+function getJdeMillisAtEndOfYear(year) {
+  let jde0;
+  if (year < 4900) {
+    const y = (year - 3900) / 1000;
+    jde0 = 1721414.39987 + 365242.88257 * y - 0.00769 * y * y - 0.00933 * y * y * y - 0.00006 * y * y * y * y;
+  } else {
+    const y = (year - 5900) / 1000;
+    jde0 = 2451900.05952 + 365242.74049 * y - 0.06223 * y * y - 0.00823 * y * y * y + 0.00032 * y * y * y * y;
+  }
+
+  const t = (jde0 - 2451545.0) / 36525;
+  const w = t * 35999.373 - 2.47;
+  const dL = 0.0334 * Math.cos(toRadians(w)) + 0.0007 * Math.cos(toRadians(2 * w)) + 1;
+
+  let s = 0;
+  for (let i = 0; i < 24; i++) {
+    s += A[i] * Math.cos(toRadians(B[i] + C[i] * t));
+  }
+
+  const jde = jde0 + (0.00001 * s) / dL;
+  return BigInt(Math.round(jde * 24 * 3600 * 1000));
+}

@@ -1,64 +1,10 @@
 // lukashianPrecompute.js
 // This file computes the data and returns it as an object for JSON serialization
 
-function getJdeMillisAtEndOfYear(year) {
-  let jde0;
-  if (year < 4900) {
-    const y = (year - 3900) / 1000;
-    jde0 = 1721414.39987 + 365242.88257 * y - 0.00769 * y * y - 0.00933 * y * y * y - 0.00006 * y * y * y * y;
-  } else {
-    const y = (year - 5900) / 1000;
-    jde0 = 2451900.05952 + 365242.74049 * y - 0.06223 * y * y - 0.00823 * y * y * y + 0.00032 * y * y * y * y;
-  }
-
-  const t = (jde0 - 2451545.0) / 36525;
-  const w = t * 35999.373 - 2.47;
-  const dL = 0.0334 * Math.cos(toRadians(w)) + 0.0007 * Math.cos(toRadians(2 * w)) + 1;
-
-  let s = 0;
-  for (let i = 0; i < 24; i++) {
-    s += A[i] * Math.cos(toRadians(B[i] + C[i] * t));
-  }
-
-  const jde = jde0 + (0.00001 * s) / dL;
-  return BigInt(Math.round(jde * 24 * 3600 * 1000));
-}
-
 function getJdeMillisForBaryCenterPerihelion(year) {
   const k = Math.round(0.99997 * (year - 5900.01));
   const jde = 2451547.507 + 365.2596358 * k + 0.0000000156 * k * k;
   return BigInt(Math.round(jde * 24 * 3600 * 1000));
-}
-
-function toRadians(degrees) {
-  return (degrees * Math.PI) / 180;
-}
-
-function toDegrees(radians) {
-  return (radians * 180) / Math.PI;
-}
-
-function binarySearch(arr, target) {
-  let low = 0;
-  let high = arr.length - 1;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    if (arr[mid] < target) {
-      low = mid + 1;
-    } else if (arr[mid] > target) {
-      high = mid - 1;
-    } else {
-      return mid;
-    }
-  }
-  return -(low + 1);
-}
-
-function getLukashianEpochMilliseconds(unixEpochMilliseconds) {
-  const unix = BigInt(unixEpochMilliseconds);
-  let index = binarySearch(UNIX_TIMESTAMPS_WITH_LEAP_SECOND, unix);
-  const numberOfLeapSeconds = index >= 0 ? index + 1 : -index - 1;
-  return unix + BigInt(numberOfLeapSeconds * 1000) + UNIX_EPOCH_OFFSET_MILLISECONDS;
 }
 
 function approxEpochDay(epochMs) {
@@ -145,11 +91,14 @@ function precompute(unixStart, unixEnd) {
   const dailyIncreaseInNanos = Number(centurialIncreaseInNanos) / (100 * 365.25);
 
   const dayEpochMs = [];
+  const startOfYearDayEpochMs = [];
   let currentDay = MIN_DAY;
+  let startOfYearMinDay = MIN_DAY;
   let epochNanosOfCurrentMeanSolarDay = PRELOADED_CUM_NANOS;
   let iterationCount = 0;
   let skippedDays = 0;
   let zeroPushed = false;
+  let startOfYearPushes = 0;
   while (currentDay <= MAX_DAY) {
     iterationCount++;
     const lengthOfCurrentMeanSolarDayInNanos = Number(lengthOfMeanSolarDayAtEpochInNanos) + dailyIncreaseInNanos * (currentDay - 1);
@@ -188,8 +137,16 @@ function precompute(unixStart, unixEnd) {
 
     if (dayValue !== 0n) {
       dayEpochMs.push(dayValue);
+      if (startOfYearPushes < 2) {
+        startOfYearDayEpochMs.push(dayValue);
+        startOfYearPushes++;
+      }
     } else if (!zeroPushed) {
       dayEpochMs.push(dayValue);
+      if (startOfYearPushes < 2) {
+        startOfYearDayEpochMs.push(dayValue);
+        startOfYearPushes++;
+      }
       zeroPushed = true;
     } else {
       skippedDays++;
@@ -203,10 +160,12 @@ function precompute(unixStart, unixEnd) {
     minYear: MIN_YEAR,
     maxYear: MAX_YEAR,
     minDay: MIN_DAY - 1,
+    startOfYearMinDay: startOfYearMinDay - 1,
     maxDay: MAX_DAY,
     yearEpochMs: yearEpochMs.map((b) => b.toString()),
-    dayEpochMs: dayEpochMs.map((b) => b.toString()),
+    startOfYearDayEpochMs: startOfYearDayEpochMs.map((b) => b.toString()),
     iterationCount: dayEpochMs.length,
+    dayEpochMs: dayEpochMs.map((b) => b.toString()),
   };
 
   return data;

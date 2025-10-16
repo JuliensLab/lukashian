@@ -11,56 +11,38 @@ async function loadData() {
     loadedData = json;
     loadedData.yearEpochMilliseconds = loadedData.yearEpochMs.map(BigInt);
     loadedData.dayEpochMilliseconds = loadedData.dayEpochMs.map(BigInt);
-    console.log("Debug: loadedData loaded, dayEpochMs length =", loadedData.dayEpochMs.length);
-    console.log("Debug: dayEpochMs[0] =", loadedData.dayEpochMs[0]);
-    console.log("Debug: dayEpochMs[last] =", loadedData.dayEpochMs[loadedData.dayEpochMs.length - 1]);
+    // console.log("Debug: loadedData loaded, dayEpochMs length =", loadedData.dayEpochMs.length);
+    // console.log("Debug: dayEpochMs[0] =", loadedData.dayEpochMs[0]);
+    // console.log("Debug: dayEpochMs[last] =", loadedData.dayEpochMs[loadedData.dayEpochMs.length - 1]);
   } catch (e) {
     console.warn("Failed to load precomputed data:", e.message);
     loadedData = null;
   }
 }
 
-function binarySearch(arr, target) {
-  let low = 0;
-  let high = arr.length - 1;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    if (arr[mid] < target) {
-      low = mid + 1;
-    } else if (arr[mid] > target) {
-      high = mid - 1;
-    } else {
-      return mid;
-    }
-  }
-  return -(low + 1);
-}
-
-function getLukashianEpochMilliseconds(unixEpochMilliseconds) {
-  const unix = BigInt(unixEpochMilliseconds);
-  let index = binarySearch(UNIX_TIMESTAMPS_WITH_LEAP_SECOND, unix);
-  const numberOfLeapSeconds = index >= 0 ? index + 1 : -index - 1;
-  const result = unix + BigInt(numberOfLeapSeconds * 1000) + UNIX_EPOCH_OFFSET_MILLISECONDS;
-
-  return result;
-}
-
 function getYearForEpochMilliseconds(epochMilliseconds) {
   if (!loadedData) return null;
   const yearEpochMs = loadedData.yearEpochMilliseconds;
-  let index = binarySearch(yearEpochMs, BigInt(epochMilliseconds));
+  const msBig = BigInt(epochMilliseconds);
+  let index = binarySearch(yearEpochMs, msBig);
   let relYear = index >= 0 ? index + 1 : -index;
-  return loadedData.minYear + relYear - 1;
+  let year = loadedData.minYear + relYear - 1;
+  console.log("Debug: epochMilliseconds = ", epochMilliseconds.toString(), " index = ", index, "year =", year);
+  if (year < loadedData.minYear || year > loadedData.maxYear) {
+    console.log("Debug: Date outside supported range - year is out of range");
+    return null;
+  }
+  return year;
 }
 
 function getEpochDayForEpochMilliseconds(epochMilliseconds) {
   if (!loadedData) return null;
   const dayEpochMs = loadedData.dayEpochMilliseconds;
-  let index = binarySearch(dayEpochMs, BigInt(epochMilliseconds));
+  const msBig = BigInt(epochMilliseconds);
+  let index = binarySearch(dayEpochMs, msBig);
   let relDay = index >= 0 ? index + 1 : -index;
   let epochDay = loadedData.minDay + relDay - 1;
-  const msBig = BigInt(epochMilliseconds);
-
+  console.log("Debug: epochMilliseconds = ", epochMilliseconds.toString(), " index = ", index, "epochDay =", epochDay);
   if (msBig < dayEpochMs[0]) {
     console.log("Debug: Date outside supported range - msBig is before the range");
     // Graceful fallback: return null instead of throw
@@ -71,10 +53,17 @@ function getEpochDayForEpochMilliseconds(epochMilliseconds) {
 
 function getDayNumber(epochDay, year) {
   if (!loadedData || epochDay === null) return null;
-  const yearEpochMs = loadedData.yearEpochMilliseconds;
   const jdeMillisAtStartOfCalendar = getJdeMillisAtEndOfYear(0);
   const epochMillisecondsAtStartOfYear = getJdeMillisAtEndOfYear(year - 1) - jdeMillisAtStartOfCalendar + 1n;
   const runningEpochDayAtStartOfYear = getEpochDayForEpochMilliseconds(epochMillisecondsAtStartOfYear);
+  console.log(
+    "Debug: jdeMillisAtStartOfCalendar =",
+    jdeMillisAtStartOfCalendar.toString(),
+    "epochMillisecondsAtStartOfYear =",
+    epochMillisecondsAtStartOfYear.toString(),
+    "runningEpochDayAtStartOfYear =",
+    runningEpochDayAtStartOfYear
+  );
   if (runningEpochDayAtStartOfYear === null) return null;
   const epochMillisecondsAtStartOfRunningDay =
     runningEpochDayAtStartOfYear === loadedData.minDay
@@ -103,12 +92,15 @@ function format(year, day, beeps) {
 }
 
 function getLukashianDatetime(unixEpoch) {
+  console.log("");
   if (!loadedData) {
     return { year: 0, day: 0, beep: 0, formattedString: "No precomputed data available.", iterationCount: 0 };
   }
   const epochMs = getLukashianEpochMilliseconds(unixEpoch);
+  console.log("Debug: getLukashianDatetime, epochMs =", epochMs.toString());
   const year = getYearForEpochMilliseconds(epochMs);
   const epochDay = getEpochDayForEpochMilliseconds(epochMs);
+  console.log("Debug: epochMs =", epochMs.toString(), "year =", year, "epochDay =", epochDay);
   if (epochDay === null) {
     return { year: 0, day: 0, beep: 0, formattedString: "Date outside supported range.", iterationCount: loadedData.iterationCount };
   }
@@ -121,36 +113,4 @@ function getLukashianDatetime(unixEpoch) {
   const formattedString = format(year, day, beeps);
 
   return { year, day, beep: beeps, formattedString, iterationCount: loadedData.iterationCount };
-}
-
-// Lightweight functions still needed
-function getJdeMillisAtEndOfYear(year) {
-  let jde0;
-  if (year < 4900) {
-    const y = (year - 3900) / 1000;
-    jde0 = 1721414.39987 + 365242.88257 * y - 0.00769 * y * y - 0.00933 * y * y * y - 0.00006 * y * y * y * y;
-  } else {
-    const y = (year - 5900) / 1000;
-    jde0 = 2451900.05952 + 365242.74049 * y - 0.06223 * y * y - 0.00823 * y * y * y + 0.00032 * y * y * y * y;
-  }
-
-  const t = (jde0 - 2451545.0) / 36525;
-  const w = t * 35999.373 - 2.47;
-  const dL = 0.0334 * Math.cos(toRadians(w)) + 0.0007 * Math.cos(toRadians(2 * w)) + 1;
-
-  let s = 0;
-  for (let i = 0; i < 24; i++) {
-    s += A[i] * Math.cos(toRadians(B[i] + C[i] * t));
-  }
-
-  const jde = jde0 + (0.00001 * s) / dL;
-  return BigInt(Math.round(jde * 24 * 3600 * 1000));
-}
-
-function toRadians(degrees) {
-  return (degrees * Math.PI) / 180;
-}
-
-function toDegrees(radians) {
-  return (radians * 180) / Math.PI;
 }

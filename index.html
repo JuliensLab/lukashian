@@ -46,7 +46,7 @@
             return loadOfficialData();
         }).then(() => {
             updateTime();
-            setInterval(updateTime, 100);
+            setInterval(updateTime, 100000);
         });
 
         async function updateTime() {
@@ -64,10 +64,12 @@
 
             prevLocal = currentLocal;
 
+            const agree = officialData && officialData.currentBeeps == lukashian.beep && officialData.currentDay == lukashian.day && officialData.currentYear == lukashian.year;
+
             document.getElementById('datetime').innerHTML = `
                 <p><strong>UTC:</strong> ${utcDate}</p>
                 <p><strong>Official Lukashian:</strong> ${officialData ? `${officialData.currentBeeps} ${officialData.currentDay}-${officialData.currentYear}` : 'Loading...'}</p>
-                <p><strong>Local Lukashian:</strong> ${lukashian.formattedString}</p>
+                <p><strong>Local Lukashian:</strong> ${lukashian.formattedString}${agree ? ' <span style="color: green;">✓</span>' : ' <span style="color: red;">✗</span>'}</p>
                 <p><strong>Iteration Count:</strong> ${lukashian.iterationCount}</p>
             `;
         }
